@@ -54,7 +54,7 @@ std::string getMyMac(const char* dev) {
     return std::string(macStr);
 }
 
-Mac getYourMac(pcap_t* handle, const std::string& myMac, const std::string& myIp, const std::string& senderIp) {
+Mac getYourMac(pcap_t* pcap, const std::string& myMac, const std::string& myIp, const std::string& senderIp) {
     EthArpPacket packet{};
 
     packet.eth_.dmac_ = Mac("ff:ff:ff:ff:ff:ff");
@@ -71,15 +71,15 @@ Mac getYourMac(pcap_t* handle, const std::string& myMac, const std::string& myIp
     packet.arp_.tmac_ = Mac("00:00:00:00:00:00");
     packet.arp_.tip_ = htonl(Ip(senderIp));
 
-    pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+    pcap_sendpacket(pcap, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
 
     while (true) {
         struct pcap_pkthdr* header;
         const u_char* recvPacket;
-        int res = pcap_next_ex(handle, &header, &recvPacket);
+        int res = pcap_next_ex(pcap, &header, &recvPacket);
         if (res == 0) continue;
         if (res < 0) {
-            std::cerr << "pcap_next_ex failed: " << pcap_geterr(handle) << "\n";
+            std::cerr << "pcap_next_ex failed: " << pcap_geterr(pcap) << "\n";
             continue;
         }
 
@@ -93,7 +93,7 @@ Mac getYourMac(pcap_t* handle, const std::string& myMac, const std::string& myIp
     }
 }
 
-void sendArp(pcap_t* handle, const std::string& myMac, const std::string& targetIp, const std::string& senderIp, const Mac& senderMac) {
+void sendArp(pcap_t* pcap, const std::string& myMac, const std::string& targetIp, const std::string& senderIp, const Mac& senderMac) {
     EthArpPacket packet{};
 
     packet.eth_.dmac_ = senderMac;
@@ -110,7 +110,7 @@ void sendArp(pcap_t* handle, const std::string& myMac, const std::string& target
     packet.arp_.tmac_ = senderMac;
     packet.arp_.tip_ = htonl(Ip(senderIp));
 
-    pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+    pcap_sendpacket(pcap, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
     std::cout << "Sent ARP to " << senderIp <<"\n";
 }
 
@@ -129,8 +129,8 @@ int main(int argc, char* argv[]) {
     std::cout << "My IP: " << myIp << "\n";
     std::cout << "My MAC: " << myMac << "\n";
 
-    pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
-    if (handle == nullptr) {
+    pcap_t* pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
+    if (pcap == nullptr) {
         std::cerr << "Could not open device " << dev << " (" << errbuf << ")\n";
         return -1;
     }
@@ -140,13 +140,13 @@ int main(int argc, char* argv[]) {
         std::string targetIp = argv[2 * i + 1];
 
         std::cout << "\nGetting MAC for sender IP: " << senderIp << "...\n";
-        Mac senderMac = getYourMac(handle, myMac, myIp, senderIp);
+        Mac senderMac = getYourMac(pcap, myMac, myIp, senderIp);
         std::cout << "    => MAC: " << std::string(senderMac) << "\n";
 
-        sendArp(handle, myMac, targetIp, senderIp, senderMac);
+        sendArp(pcap, myMac, targetIp, senderIp, senderMac);
     }
 
-    pcap_close(handle);
+    pcap_close(pcap);
     return 0;
 }
 
